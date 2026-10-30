@@ -11,6 +11,21 @@ export interface StateMappingEntry {
   defaultValue: unknown;
 }
 
+export type ScheduleDay = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+export type AnimationId =
+  | "asteroid-earth" | "aquarium" | "campfire" | "cat-and-fly"
+  | "dragon-eye" | "earth-and-sun" | "messi-barca" | "moon-stars"
+  | "moving-car" | "moving-stars" | "sleepy-cat" | "solar-system";
+
+export interface ScheduleConfig extends Record<string, unknown> {
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  days: ScheduleDay[];
+}
+
 export interface DashboardModule {
   moduleId: string;
   name: string;
@@ -18,6 +33,7 @@ export interface DashboardModule {
   enabled: boolean;
   dataSource?: "api" | "configuration";
   staticData?: Record<string, unknown>;
+  schedule?: ScheduleConfig;
   refreshTime?: number;
   city?: string;
   payload?: Record<string, unknown>;

@@ -7,6 +7,11 @@ import { ApiError, configurationApi } from "./api";
 import type { Credentials, DashboardConfiguration, DashboardModule } from "./types";
 
 const FOCUS_MODULE_ID = "focus-countdown";
+const ANIMATION_IDS = [
+  "asteroid-earth", "aquarium", "campfire", "cat-and-fly", "dragon-eye",
+  "earth-and-sun", "messi-barca", "moon-stars", "moving-car", "moving-stars",
+  "sleepy-cat", "solar-system",
+] as const;
 
 function createModule(): DashboardModule {
   return {
@@ -100,6 +105,7 @@ function ModuleCard({ module, index, expanded, onExpand, onChange, onRemove }: {
 }) {
   const update = <K extends keyof DashboardModule>(key: K, value: DashboardModule[K]) => onChange({ ...module, [key]: value });
   const isFocus = module.moduleId === FOCUS_MODULE_ID;
+  const isAnimation = module.display?.renderer === "animation";
 
   return <article className={`module-card ${module.enabled ? "active" : ""} ${isFocus ? "focus" : ""}`}>
     <button className="card-summary" onClick={onExpand} type="button">
@@ -125,9 +131,13 @@ function ModuleCard({ module, index, expanded, onExpand, onChange, onRemove }: {
           const dataSource = e.target.value as "api" | "configuration";
           onChange({ ...module, dataSource, staticData: dataSource === "configuration" ? (module.staticData ?? { text: "Your message" }) : undefined });
         }}><option value="api">Backend API</option><option value="configuration">Configuration (no API call)</option></select></label>
+        {isAnimation && <label>Animation<select value={typeof module.staticData?.animationId === "string" ? module.staticData.animationId : "campfire"} onChange={(e) => update("staticData", { ...module.staticData, animationId: e.target.value })}>
+          {ANIMATION_IDS.map((animationId) => <option key={animationId} value={animationId}>{animationId}</option>)}
+        </select></label>}
       </div>
       <div className="json-grid">
-        {module.dataSource === "configuration" && <JsonField label="Static data" required value={module.staticData} onChange={(value) => update("staticData", value ?? {})} />}
+        {module.dataSource === "configuration" && !isAnimation && <JsonField label="Static data" required value={module.staticData} onChange={(value) => update("staticData", value ?? {})} />}
+        <JsonField label="Schedule" value={module.schedule} onChange={(value) => update("schedule", value as DashboardModule["schedule"])} />
         <JsonField label="Payload" value={module.payload} onChange={(value) => update("payload", value)} />
         <JsonField label="Display" value={module.display} onChange={(value) => update("display", value as DashboardModule["display"])} />
         <JsonField label="Module config" required value={module.config} onChange={(value) => update("config", value ?? {})} />
