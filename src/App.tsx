@@ -4,7 +4,10 @@ import {
   LoaderCircle, LogOut, RefreshCw, Save, Settings2, Trash2, Zap,
 } from "lucide-react";
 import { ApiError, configurationApi } from "./api";
-import type { Credentials, DashboardConfiguration, DashboardModule } from "./types";
+import { FootballEditor } from "./FootballEditor";
+import { FootballTokenSettings } from "./FootballTokenSettings";
+import { OAuthIntegrations } from "./OAuthIntegrations";
+import type { Credentials, DashboardConfiguration, DashboardModule, ModuleCatalogEntry, ScheduleConfig, ScheduleDay } from "./types";
 
 const FOCUS_MODULE_ID = "focus-countdown";
 const ANIMATION_IDS = [
@@ -12,18 +15,20 @@ const ANIMATION_IDS = [
   "earth-and-sun", "messi-barca", "moon-stars", "moving-car", "moving-stars",
   "sleepy-cat", "solar-system",
 ] as const;
+const SCHEDULE_DAYS: { value: ScheduleDay; label: string }[] = [
+  { value: "mon", label: "M" }, { value: "tue", label: "T" },
+  { value: "wed", label: "W" }, { value: "thu", label: "T" },
+  { value: "fri", label: "F" }, { value: "sat", label: "S" },
+  { value: "sun", label: "S" },
+];
 
-function createModule(): DashboardModule {
-  return {
-    moduleId: `new-module-${Date.now().toString().slice(-6)}`,
-    name: "New module",
-    enabled: false,
-    duration: 5000,
-    dataSource: "api",
-    payload: {},
-    display: { mode: "single", renderer: "text" },
-    config: {},
-  };
+function createModule(entry: ModuleCatalogEntry, existing: DashboardModule[]): DashboardModule {
+  const module = structuredClone(entry.template);
+  const usedIds = new Set(existing.map((item) => item.moduleId));
+  let moduleId = entry.moduleType;
+  let copy = 2;
+  while (usedIds.has(moduleId)) moduleId = `${entry.moduleType}-${copy++}`;
+  return { ...module, moduleId, moduleType: entry.moduleType, enabled: false };
 }
 
 function Login({ onConnect, loading, error }: {
@@ -95,16 +100,42 @@ function JsonField({ label, value, onChange, required = false }: {
   </label>;
 }
 
-function ModuleCard({ module, index, expanded, onExpand, onChange, onRemove }: {
+function ScheduleEditor({ value, onChange }: {
+  value: ScheduleConfig;
+  onChange: (value: ScheduleConfig) => void;
+}) {
+  const setDay = (day: ScheduleDay, enabled: boolean) => {
+    const days = enabled
+      ? SCHEDULE_DAYS.map(({ value: candidate }) => candidate).filter((candidate) => candidate === day || value.days.includes(candidate))
+      : value.days.filter((candidate) => candidate !== day);
+    onChange({ ...value, days });
+  };
+  return <fieldset className="schedule-editor">
+    <legend>Schedule</legend>
+    <label className="schedule-enabled"><span>Use schedule</span><span className="switch"><input type="checkbox" checked={value.enabled} onChange={(event) => onChange({ ...value, enabled: event.target.checked })} /><span /></span></label>
+    <div className="schedule-times">
+      <label>Start<input type="time" value={value.startTime} onChange={(event) => onChange({ ...value, startTime: event.target.value })} /></label>
+      <label>End<input type="time" value={value.endTime} onChange={(event) => onChange({ ...value, endTime: event.target.value })} /></label>
+    </div>
+    <label>Timezone<select value={value.timezone} onChange={(event) => onChange({ ...value, timezone: event.target.value })}><option value="Asia/Kolkata">Asia/Kolkata</option></select></label>
+    <span className="days-label">Active days</span>
+    <div className="day-picker">{SCHEDULE_DAYS.map((day) => <label key={day.value} title={day.value}><input type="checkbox" checked={value.days.includes(day.value)} onChange={(event) => setDay(day.value, event.target.checked)} /><span>{day.label}</span></label>)}</div>
+  </fieldset>;
+}
+
+function ModuleCard({ module, index, expanded, onExpand, onChange, onRemove, credentials, footballTokenVersion }: {
   module: DashboardModule;
   index: number;
   expanded: boolean;
   onExpand: () => void;
   onChange: (module: DashboardModule) => void;
   onRemove: () => void;
+  credentials: Credentials;
+  footballTokenVersion: number;
 }) {
   const update = <K extends keyof DashboardModule>(key: K, value: DashboardModule[K]) => onChange({ ...module, [key]: value });
-  const isFocus = module.moduleId === FOCUS_MODULE_ID;
+  const moduleType = module.moduleType ?? module.moduleId;
+  const isFocus = moduleType === FOCUS_MODULE_ID;
   const isAnimation = module.display?.renderer === "animation";
 
   return <article className={`module-card ${module.enabled ? "active" : ""} ${isFocus ? "focus" : ""}`}>
@@ -124,6 +155,7 @@ function ModuleCard({ module, index, expanded, onExpand, onChange, onRemove }: {
       <div className="field-grid">
         <label>Name<input value={module.name} onChange={(e) => update("name", e.target.value)} /></label>
         <label>Module ID<input value={module.moduleId} onChange={(e) => update("moduleId", e.target.value)} /></label>
+        <label>Module type<input value={moduleType} readOnly title="Provider and renderer implementation used by this instance" /></label>
         <label>Duration <small>ms</small><input min="1" type="number" value={module.duration} onChange={(e) => update("duration", Number(e.target.value))} /></label>
         <label>Refresh time <small>ms, optional</small><input min="1" type="number" value={module.refreshTime ?? ""} onChange={(e) => update("refreshTime", e.target.value ? Number(e.target.value) : undefined)} /></label>
         <label>City <small>optional</small><input value={module.city ?? ""} onChange={(e) => update("city", e.target.value || undefined)} /></label>
@@ -135,9 +167,11 @@ function ModuleCard({ module, index, expanded, onExpand, onChange, onRemove }: {
           {ANIMATION_IDS.map((animationId) => <option key={animationId} value={animationId}>{animationId}</option>)}
         </select></label>}
       </div>
+      {moduleType === "football" && <FootballEditor credentials={credentials} module={module} onChange={onChange} tokenVersion={footballTokenVersion} />}
       <div className="json-grid">
         {module.dataSource === "configuration" && !isAnimation && <JsonField label="Static data" required value={module.staticData} onChange={(value) => update("staticData", value ?? {})} />}
-        <JsonField label="Schedule" value={module.schedule} onChange={(value) => update("schedule", value as DashboardModule["schedule"])} />
+        {isAnimation && <ScheduleEditor value={module.schedule ?? { enabled: false, startTime: "20:00", endTime: "23:00", timezone: "Asia/Kolkata", days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] }} onChange={(value) => update("schedule", value)} />}
+        {!isAnimation && module.schedule && <JsonField label="Schedule" value={module.schedule} onChange={(value) => update("schedule", value as DashboardModule["schedule"])} />}
         <JsonField label="Payload" value={module.payload} onChange={(value) => update("payload", value)} />
         <JsonField label="Display" value={module.display} onChange={(value) => update("display", value as DashboardModule["display"])} />
         <JsonField label="Module config" required value={module.config} onChange={(value) => update("config", value ?? {})} />
@@ -155,6 +189,9 @@ export default function App() {
   const [expanded, setExpanded] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [catalog, setCatalog] = useState<ModuleCatalogEntry[]>([]);
+  const [moduleTemplate, setModuleTemplate] = useState("");
+  const [footballTokenVersion, setFootballTokenVersion] = useState(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const dirty = useMemo(() => configuration && baseline ? JSON.stringify(configuration) !== JSON.stringify(baseline) : false, [configuration, baseline]);
@@ -162,7 +199,12 @@ export default function App() {
   const load = async (auth: Credentials) => {
     setLoading(true); setError("");
     try {
-      const next = await configurationApi.get(auth);
+      const [next, catalogResponse] = await Promise.all([
+        configurationApi.get(auth),
+        configurationApi.catalog(auth),
+      ]);
+      setCatalog(catalogResponse.modules);
+      setModuleTemplate((current) => current || catalogResponse.modules[0]?.moduleType || "");
       setCredentials(auth); setConfiguration(next); setBaseline(structuredClone(next));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load configuration");
@@ -212,9 +254,11 @@ export default function App() {
           <div><span>0</span><span>100</span></div>
         </div>
       </section>
-      <section className="section-heading"><div><p className="eyebrow">CONFIGURATION OBJECTS</p><h2>Display modules</h2></div><button className="button secondary" onClick={() => { setConfiguration({ ...configuration, modules: [...configuration.modules, createModule()] }); setExpanded(configuration.modules.length); }}><CirclePlus size={18} /> Add object</button></section>
+      <OAuthIntegrations credentials={credentials} />
+      <FootballTokenSettings credentials={credentials} onSaved={() => setFootballTokenVersion((version) => version + 1)} />
+      <section className="section-heading"><div><p className="eyebrow">CONFIGURATION OBJECTS</p><h2>Display modules</h2></div><div className="add-module-controls"><select aria-label="New module type" value={moduleTemplate} onChange={(event) => setModuleTemplate(event.target.value)}>{catalog.map((entry) => <option key={entry.moduleType} value={entry.moduleType}>{entry.name}</option>)}</select><button className="button secondary" title="Add a pre-populated module" disabled={!moduleTemplate} onClick={() => { const entry = catalog.find((item) => item.moduleType === moduleTemplate); if (!entry) return; setConfiguration({ ...configuration, modules: [...configuration.modules, createModule(entry, configuration.modules)] }); setExpanded(configuration.modules.length); }}><CirclePlus size={18} /> Add module</button></div></section>
       <div className="modules">
-        {configuration.modules.map((module, index) => <ModuleCard key={`${index}-${module.moduleId}`} module={module} index={index} expanded={expanded === index} onExpand={() => setExpanded(expanded === index ? null : index)} onChange={(next) => changeModule(index, next)} onRemove={() => { setConfiguration({ ...configuration, modules: configuration.modules.filter((_, i) => i !== index) }); setExpanded(null); }} />)}
+        {configuration.modules.map((module, index) => <ModuleCard key={`${index}-${module.moduleId}`} module={module} index={index} credentials={credentials} footballTokenVersion={footballTokenVersion} expanded={expanded === index} onExpand={() => setExpanded(expanded === index ? null : index)} onChange={(next) => changeModule(index, next)} onRemove={() => { setConfiguration({ ...configuration, modules: configuration.modules.filter((_, i) => i !== index) }); setExpanded(null); }} />)}
       </div>
       <div className="save-bar">
         <div><i className={dirty ? "dirty" : ""} /><span>{dirty ? "Unsaved changes" : "Configuration is up to date"}</span></div>

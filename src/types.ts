@@ -28,6 +28,7 @@ export interface ScheduleConfig extends Record<string, unknown> {
 
 export interface DashboardModule {
   moduleId: string;
+  moduleType?: string;
   name: string;
   duration: number;
   enabled: boolean;
@@ -41,6 +42,12 @@ export interface DashboardModule {
   stateMapping?: Record<string, StateMappingEntry>;
   config: Record<string, unknown>;
   [key: string]: unknown;
+}
+
+export interface ModuleCatalogEntry {
+  moduleType: string;
+  name: string;
+  template: DashboardModule;
 }
 
 export interface DashboardConfiguration {
