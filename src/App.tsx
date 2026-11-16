@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
 import {
   AlertCircle, Check, ChevronDown, ChevronUp, CirclePlus, Cloud,
-  LoaderCircle, LogOut, RefreshCw, Save, Settings2, Trash2, Zap,
+  GripVertical, LoaderCircle, LogOut, RefreshCw, Save, Settings2, Trash2, Zap,
 } from "lucide-react";
 import { ApiError, configurationApi } from "./api";
 import { FootballEditor } from "./FootballEditor";
@@ -124,13 +124,20 @@ function ScheduleEditor({ value, onChange }: {
   </fieldset>;
 }
 
-function ModuleCard({ module, index, expanded, onExpand, onChange, onRemove, credentials, footballTokenVersion }: {
+function ModuleCard({ module, index, expanded, dragging, dropTarget, onExpand, onChange, onRemove, onDragStart, onDragOver, onDrop, onDragEnd, onKeyboardMove, credentials, footballTokenVersion }: {
   module: DashboardModule;
   index: number;
   expanded: boolean;
+  dragging: boolean;
+  dropTarget: boolean;
   onExpand: () => void;
   onChange: (module: DashboardModule) => void;
   onRemove: () => void;
+  onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
+  onDragEnd: () => void;
+  onKeyboardMove: (direction: -1 | 1) => void;
   credentials: Credentials;
   footballTokenVersion: number;
 }) {
@@ -139,15 +146,39 @@ function ModuleCard({ module, index, expanded, onExpand, onChange, onRemove, cre
   const isFocus = moduleType === FOCUS_MODULE_ID;
   const isAnimation = module.display?.renderer === "animation";
 
-  return <article className={`module-card ${module.enabled ? "active" : ""} ${isFocus ? "focus" : ""}`}>
-    <button className="card-summary" onClick={onExpand} type="button">
-      <span className="drag-index">{String(index + 1).padStart(2, "0")}</span>
-      <span className="module-icon">{isFocus ? <Zap size={18} /> : <Settings2 size={18} />}</span>
-      <span className="module-title"><strong>{module.name || "Untitled module"}</strong><small>{module.moduleId}</small></span>
-      {isFocus && <span className="focus-pill">FOCUS</span>}
-      <span className={`status ${module.enabled ? "on" : ""}`}><i />{module.enabled ? "Active" : "Off"}</span>
-      {expanded ? <ChevronUp size={19} /> : <ChevronDown size={19} />}
-    </button>
+  const handleKeyboardMove = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    onKeyboardMove(event.key === "ArrowUp" ? -1 : 1);
+  };
+
+  return <article
+    className={`module-card ${module.enabled ? "active" : ""} ${isFocus ? "focus" : ""} ${dragging ? "dragging" : ""} ${dropTarget ? "drop-target" : ""}`}
+    onDragOver={onDragOver}
+    onDrop={onDrop}
+  >
+    <div className="card-summary">
+      <button
+        className="drag-handle"
+        type="button"
+        draggable
+        aria-label={`Move ${module.name || "module"}; use drag and drop or arrow keys`}
+        title="Drag to reorder · Arrow keys also move this module"
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onKeyDown={handleKeyboardMove}
+      >
+        <GripVertical size={17} />
+        <span className="drag-index">{String(index + 1).padStart(2, "0")}</span>
+      </button>
+      <button className="card-expand" onClick={onExpand} type="button">
+        <span className="module-icon">{isFocus ? <Zap size={18} /> : <Settings2 size={18} />}</span>
+        <span className="module-title"><strong>{module.name || "Untitled module"}</strong><small>{module.moduleId}</small></span>
+        {isFocus && <span className="focus-pill">FOCUS</span>}
+        <span className={`status ${module.enabled ? "on" : ""}`}><i />{module.enabled ? "Active" : "Off"}</span>
+        {expanded ? <ChevronUp size={19} /> : <ChevronDown size={19} />}
+      </button>
+    </div>
     {expanded && <div className="card-body">
       <div className="toggle-row">
         <div><strong>Module enabled</strong><small>Control this module independently.</small></div>
@@ -194,6 +225,8 @@ export default function App() {
   const [catalog, setCatalog] = useState<ModuleCatalogEntry[]>([]);
   const [moduleTemplate, setModuleTemplate] = useState("");
   const [footballTokenVersion, setFootballTokenVersion] = useState(0);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const dirty = useMemo(() => configuration && baseline ? JSON.stringify(configuration) !== JSON.stringify(baseline) : false, [configuration, baseline]);
@@ -218,6 +251,27 @@ export default function App() {
   const changeModule = (index: number, next: DashboardModule) => {
     const modules = configuration.modules.map((item, itemIndex) => itemIndex === index ? next : item);
     setConfiguration({ ...configuration, modules });
+  };
+
+  const moveModule = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 ||
+        from >= configuration.modules.length || to >= configuration.modules.length) return;
+    const modules = [...configuration.modules];
+    const [moved] = modules.splice(from, 1);
+    modules.splice(to, 0, moved);
+    setConfiguration({ ...configuration, modules });
+    setExpanded((current) => {
+      if (current === null) return null;
+      if (current === from) return to;
+      if (from < to && current > from && current <= to) return current - 1;
+      if (from > to && current >= to && current < from) return current + 1;
+      return current;
+    });
+  };
+
+  const finishDragging = () => {
+    setDraggingIndex(null);
+    setDropTargetIndex(null);
   };
 
   const save = async () => {
@@ -258,9 +312,39 @@ export default function App() {
       </section>
       <OAuthIntegrations credentials={credentials} />
       <FootballTokenSettings credentials={credentials} onSaved={() => setFootballTokenVersion((version) => version + 1)} />
-      <section className="section-heading"><div><p className="eyebrow">CONFIGURATION OBJECTS</p><h2>Display modules</h2></div><div className="add-module-controls"><select aria-label="New module type" value={moduleTemplate} onChange={(event) => setModuleTemplate(event.target.value)}>{catalog.map((entry) => <option key={entry.moduleType} value={entry.moduleType}>{entry.name}</option>)}</select><button className="button secondary" title="Add a pre-populated module" disabled={!moduleTemplate} onClick={() => { const entry = catalog.find((item) => item.moduleType === moduleTemplate); if (!entry) return; setConfiguration({ ...configuration, modules: [...configuration.modules, createModule(entry, configuration.modules)] }); setExpanded(configuration.modules.length); }}><CirclePlus size={18} /> Add module</button></div></section>
+      <section className="section-heading"><div><p className="eyebrow">CONFIGURATION OBJECTS</p><h2>Display modules</h2><p className="reorder-hint">Drag a card by its grip to change the panel playback order.</p></div><div className="add-module-controls"><select aria-label="New module type" value={moduleTemplate} onChange={(event) => setModuleTemplate(event.target.value)}>{catalog.map((entry) => <option key={entry.moduleType} value={entry.moduleType}>{entry.name}</option>)}</select><button className="button secondary" title="Add a pre-populated module" disabled={!moduleTemplate} onClick={() => { const entry = catalog.find((item) => item.moduleType === moduleTemplate); if (!entry) return; setConfiguration({ ...configuration, modules: [...configuration.modules, createModule(entry, configuration.modules)] }); setExpanded(configuration.modules.length); }}><CirclePlus size={18} /> Add module</button></div></section>
       <div className="modules">
-        {configuration.modules.map((module, index) => <ModuleCard key={`${index}-${module.moduleId}`} module={module} index={index} credentials={credentials} footballTokenVersion={footballTokenVersion} expanded={expanded === index} onExpand={() => setExpanded(expanded === index ? null : index)} onChange={(next) => changeModule(index, next)} onRemove={() => { setConfiguration({ ...configuration, modules: configuration.modules.filter((_, i) => i !== index) }); setExpanded(null); }} />)}
+        {configuration.modules.map((module, index) => <ModuleCard
+          key={module.moduleId}
+          module={module}
+          index={index}
+          credentials={credentials}
+          footballTokenVersion={footballTokenVersion}
+          expanded={expanded === index}
+          dragging={draggingIndex === index}
+          dropTarget={dropTargetIndex === index && draggingIndex !== index}
+          onExpand={() => setExpanded(expanded === index ? null : index)}
+          onChange={(next) => changeModule(index, next)}
+          onRemove={() => { setConfiguration({ ...configuration, modules: configuration.modules.filter((_, i) => i !== index) }); setExpanded(null); }}
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", String(index));
+            setDraggingIndex(index);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            setDropTargetIndex(index);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const source = draggingIndex ?? Number(event.dataTransfer.getData("text/plain"));
+            if (Number.isInteger(source)) moveModule(source, index);
+            finishDragging();
+          }}
+          onDragEnd={finishDragging}
+          onKeyboardMove={(direction) => moveModule(index, index + direction)}
+        />)}
       </div>
       <div className="save-bar">
         <div><i className={dirty ? "dirty" : ""} /><span>{dirty ? "Unsaved changes" : "Configuration is up to date"}</span></div>
