@@ -7,6 +7,7 @@ import { ApiError, configurationApi } from "./api";
 import { FootballEditor } from "./FootballEditor";
 import { FootballTokenSettings } from "./FootballTokenSettings";
 import { OAuthIntegrations } from "./OAuthIntegrations";
+import { MarketBreadthEditor } from "./MarketBreadthEditor";
 import type { Credentials, DashboardConfiguration, DashboardModule, ModuleCatalogEntry, ScheduleConfig, ScheduleDay } from "./types";
 
 const FOCUS_MODULE_ID = "focus-countdown";
@@ -168,6 +169,7 @@ function ModuleCard({ module, index, expanded, onExpand, onChange, onRemove, cre
         </select></label>}
       </div>
       {moduleType === "football" && <FootballEditor credentials={credentials} module={module} onChange={onChange} tokenVersion={footballTokenVersion} />}
+      {moduleType === "market-breadth" && <MarketBreadthEditor credentials={credentials} module={module} onChange={onChange} />}
       <div className="json-grid">
         {module.dataSource === "configuration" && !isAnimation && <JsonField label="Static data" required value={module.staticData} onChange={(value) => update("staticData", value ?? {})} />}
         {isAnimation && <ScheduleEditor value={module.schedule ?? { enabled: false, startTime: "20:00", endTime: "23:00", timezone: "Asia/Kolkata", days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] }} onChange={(value) => update("schedule", value)} />}

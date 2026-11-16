@@ -68,6 +68,17 @@ export const footballApi = {
     request<{ teams: FootballTeam[] }>(`/api/football/competitions/${encodeURIComponent(code)}/teams`, credentials),
 };
 
+export interface MarketIndexOption {
+  name: string;
+  symbol: string;
+  category: string | null;
+}
+
+export const marketApi = {
+  indices: (credentials: Credentials) =>
+    request<{ indices: MarketIndexOption[] }>("/api/market-indices", credentials),
+};
+
 export interface OAuthStatus {
   connected: boolean;
   expiresAt: string | null;
