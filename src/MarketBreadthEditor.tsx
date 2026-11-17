@@ -9,9 +9,10 @@ export function MarketBreadthEditor({ credentials, module, onChange }: {
   module: DashboardModule;
   onChange: (next: DashboardModule) => void;
 }) {
-  const selected = Array.isArray(module.payload?.indices)
-    ? module.payload.indices.filter((item): item is string => typeof item === "string")
+  const selected = Array.isArray(module.payload?.instrumentKeys)
+    ? module.payload.instrumentKeys.filter((item): item is string => typeof item === "string")
     : [];
+  const momentumMinutes = module.payload?.momentumMinutes === 15 ? 15 : 5;
   const [options, setOptions] = useState<MarketIndexOption[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -36,28 +37,29 @@ export function MarketBreadthEditor({ credentials, module, onChange }: {
       item.category?.toLowerCase().includes(needle));
   }, [options, query]);
 
-  const toggle = (symbol: string, checked: boolean) => {
+  const toggle = (instrumentKey: string, checked: boolean) => {
     if (checked && selected.length >= MAX_SELECTED) {
       setError(`Choose at most ${MAX_SELECTED} indices.`);
       return;
     }
-    const indices = checked
-      ? [...selected, symbol]
-      : selected.filter((item) => item !== symbol);
+    const instrumentKeys = checked
+      ? [...selected, instrumentKey]
+      : selected.filter((item) => item !== instrumentKey);
     setError("");
-    onChange({ ...module, payload: { ...module.payload, indices } });
+    onChange({ ...module, payload: { ...module.payload, instrumentKeys } });
   };
 
   return <fieldset className="market-editor">
-    <legend>Market breadth</legend>
-    <p>The breadth summary uses the complete market. Only checked indices appear in the scrolling ticker, in selection order.</p>
+    <legend>Market insights</legend>
+    <p>Choose Upstox index instruments for momentum and range analysis. Select both NIFTY 50 and NIFTY BANK to calculate relative strength.</p>
+    <label className="market-search">Momentum window<select value={momentumMinutes} onChange={(event) => onChange({ ...module, payload: { ...module.payload, momentumMinutes: Number(event.target.value) } })}><option value={5}>5 minutes</option><option value={15}>15 minutes</option></select></label>
     <label className="market-search">Find an index<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="NIFTY 50, BANK, MIDCAP…" /></label>
     <div className="market-selection-summary"><strong>{selected.length}</strong> / {MAX_SELECTED} selected</div>
     <div className="market-index-list">
       {loading && <span className="market-empty">Loading indices…</span>}
       {!loading && filtered.length === 0 && <span className="market-empty">No matching indices</span>}
-      {filtered.map((item) => <label key={item.symbol} title={item.category ?? undefined}>
-        <input type="checkbox" checked={selected.includes(item.symbol)} onChange={(event) => toggle(item.symbol, event.target.checked)} />
+      {filtered.map((item) => <label key={item.instrumentKey} title={item.category ?? undefined}>
+        <input type="checkbox" checked={selected.includes(item.instrumentKey)} onChange={(event) => toggle(item.instrumentKey, event.target.checked)} />
         <span><strong>{item.name}</strong><small>{item.category ?? item.symbol}</small></span>
       </label>)}
     </div>

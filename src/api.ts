@@ -71,12 +71,22 @@ export const footballApi = {
 export interface MarketIndexOption {
   name: string;
   symbol: string;
+  instrumentKey: string;
   category: string | null;
 }
 
 export const marketApi = {
   indices: (credentials: Credentials) =>
     request<{ indices: MarketIndexOption[] }>("/api/market-indices", credentials),
+};
+
+export const upstoxApi = {
+  tokenStatus: (credentials: Credentials) =>
+    request<{ configured: boolean }>("/api/upstox/token", credentials),
+  saveToken: (credentials: Credentials, token: string) =>
+    request<{ configured: boolean }>("/api/upstox/token", credentials, {
+      method: "PUT", body: JSON.stringify({ token }),
+    }),
 };
 
 export interface OAuthStatus {

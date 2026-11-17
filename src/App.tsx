@@ -8,6 +8,7 @@ import { FootballEditor } from "./FootballEditor";
 import { FootballTokenSettings } from "./FootballTokenSettings";
 import { OAuthIntegrations } from "./OAuthIntegrations";
 import { MarketBreadthEditor } from "./MarketBreadthEditor";
+import { UpstoxTokenSettings } from "./UpstoxTokenSettings";
 import type { Credentials, DashboardConfiguration, DashboardModule, ModuleCatalogEntry, ScheduleConfig, ScheduleDay } from "./types";
 
 const FOCUS_MODULE_ID = "focus-countdown";
@@ -312,6 +313,7 @@ export default function App() {
       </section>
       <OAuthIntegrations credentials={credentials} />
       <FootballTokenSettings credentials={credentials} onSaved={() => setFootballTokenVersion((version) => version + 1)} />
+      <UpstoxTokenSettings credentials={credentials} />
       <section className="section-heading"><div><p className="eyebrow">CONFIGURATION OBJECTS</p><h2>Display modules</h2><p className="reorder-hint">Drag a card by its grip to change the panel playback order.</p></div><div className="add-module-controls"><select aria-label="New module type" value={moduleTemplate} onChange={(event) => setModuleTemplate(event.target.value)}>{catalog.map((entry) => <option key={entry.moduleType} value={entry.moduleType}>{entry.name}</option>)}</select><button className="button secondary" title="Add a pre-populated module" disabled={!moduleTemplate} onClick={() => { const entry = catalog.find((item) => item.moduleType === moduleTemplate); if (!entry) return; setConfiguration({ ...configuration, modules: [...configuration.modules, createModule(entry, configuration.modules)] }); setExpanded(configuration.modules.length); }}><CirclePlus size={18} /> Add module</button></div></section>
       <div className="modules">
         {configuration.modules.map((module, index) => <ModuleCard
